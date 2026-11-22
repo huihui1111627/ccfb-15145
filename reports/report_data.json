@@ -1,0 +1,584 @@
+{
+  "config": {
+    "layers": 2,
+    "heads": 4,
+    "hidden": 24,
+    "ff": 48,
+    "vocab": 31,
+    "world_size": 2,
+    "seq_len": 9,
+    "dropout": 0.0
+  },
+  "layer_plan": [
+    {
+      "layer": "词嵌入/输出权重（共享）",
+      "sharding": "按词表切：每卡 16 行（含 padding）× H=24",
+      "comm_fwd": "嵌入 all-reduce + reduce-scatter；输出前 all-gather；CE 3 次 all-reduce",
+      "comm_bwd": "输出 dh all-reduce + reduce-scatter；嵌入 all-gather"
+    },
+    {
+      "layer": "LayerNorm ×(2L+1) / Dropout / GELU / 残差",
+      "sharding": "按序列长度切：每卡 (S-1)/P 个 token；gamma/beta 复制",
+      "comm_fwd": "无（LN 复制参数梯度在反向 all-reduce）",
+      "comm_bwd": "每个 LN 2 次 all-reduce（dgamma、dbeta）"
+    },
+    {
+      "layer": "block0 QKV（列切）",
+      "sharding": "W 24×36、偏置 36；按头切 2/4 头",
+      "comm_fwd": "入口 all-gather 序列",
+      "comm_bwd": "出口 reduce-scatter"
+    },
+    {
+      "layer": "block0 注意力内部",
+      "sharding": "每卡 2 个头，完整序列上算 softmax",
+      "comm_fwd": "无",
+      "comm_bwd": "无"
+    },
+    {
+      "layer": "block0 输出 O（行切）",
+      "sharding": "W 12×24，无偏置",
+      "comm_fwd": "出口 reduce-scatter（替代全归约）",
+      "comm_bwd": "入口 all-gather"
+    },
+    {
+      "layer": "block0 FC1（列切）",
+      "sharding": "W 24×24、偏置 24",
+      "comm_fwd": "入口 all-gather",
+      "comm_bwd": "出口 reduce-scatter"
+    },
+    {
+      "layer": "block0 FC2（行切）",
+      "sharding": "W 24×24，无偏置",
+      "comm_fwd": "出口 reduce-scatter",
+      "comm_bwd": "入口 all-gather"
+    },
+    {
+      "layer": "block1 QKV（列切）",
+      "sharding": "W 24×36、偏置 36；按头切 2/4 头",
+      "comm_fwd": "入口 all-gather 序列",
+      "comm_bwd": "出口 reduce-scatter"
+    },
+    {
+      "layer": "block1 注意力内部",
+      "sharding": "每卡 2 个头，完整序列上算 softmax",
+      "comm_fwd": "无",
+      "comm_bwd": "无"
+    },
+    {
+      "layer": "block1 输出 O（行切）",
+      "sharding": "W 12×24，无偏置",
+      "comm_fwd": "出口 reduce-scatter（替代全归约）",
+      "comm_bwd": "入口 all-gather"
+    },
+    {
+      "layer": "block1 FC1（列切）",
+      "sharding": "W 24×24、偏置 24",
+      "comm_fwd": "入口 all-gather",
+      "comm_bwd": "出口 reduce-scatter"
+    },
+    {
+      "layer": "block1 FC2（行切）",
+      "sharding": "W 24×24，无偏置",
+      "comm_fwd": "出口 reduce-scatter",
+      "comm_bwd": "入口 all-gather"
+    }
+  ],
+  "memory": {
+    "weight_breakdown_elems": {
+      "vocab.weight": 384,
+      "layernorm": 240,
+      "blocks": 4728
+    },
+    "per_rank": [
+      {
+        "rank": 0,
+        "param_bytes": 42816.0,
+        "grad_bytes": 42816.0,
+        "activation_bytes": 19712.0,
+        "peak_bytes": 105344.0
+      },
+      {
+        "rank": 1,
+        "param_bytes": 42816.0,
+        "grad_bytes": 42816.0,
+        "activation_bytes": 19712.0,
+        "peak_bytes": 105344.0
+      }
+    ],
+    "activation_items": [
+      {
+        "name": "block0.ln1.xhat",
+        "elements": 96,
+        "bytes": 768.0
+      },
+      {
+        "name": "block0.qkv.x_full",
+        "elements": 192,
+        "bytes": 1536.0
+      },
+      {
+        "name": "block0.attn.probs",
+        "elements": 128,
+        "bytes": 1024.0
+      },
+      {
+        "name": "block0.attn.out.x_full",
+        "elements": 96,
+        "bytes": 768.0
+      },
+      {
+        "name": "block0.ln2.xhat",
+        "elements": 96,
+        "bytes": 768.0
+      },
+      {
+        "name": "block0.fc1.x_full",
+        "elements": 192,
+        "bytes": 1536.0
+      },
+      {
+        "name": "block0.gelu",
+        "elements": 192,
+        "bytes": 1536.0
+      },
+      {
+        "name": "block0.fc2.x_full",
+        "elements": 192,
+        "bytes": 1536.0
+      },
+      {
+        "name": "block1.ln1.xhat",
+        "elements": 96,
+        "bytes": 768.0
+      },
+      {
+        "name": "block1.qkv.x_full",
+        "elements": 192,
+        "bytes": 1536.0
+      },
+      {
+        "name": "block1.attn.probs",
+        "elements": 128,
+        "bytes": 1024.0
+      },
+      {
+        "name": "block1.attn.out.x_full",
+        "elements": 96,
+        "bytes": 768.0
+      },
+      {
+        "name": "block1.ln2.xhat",
+        "elements": 96,
+        "bytes": 768.0
+      },
+      {
+        "name": "block1.fc1.x_full",
+        "elements": 192,
+        "bytes": 1536.0
+      },
+      {
+        "name": "block1.gelu",
+        "elements": 192,
+        "bytes": 1536.0
+      },
+      {
+        "name": "block1.fc2.x_full",
+        "elements": 192,
+        "bytes": 1536.0
+      },
+      {
+        "name": "ln_f.xhat",
+        "elements": 96,
+        "bytes": 768.0
+      }
+    ]
+  },
+  "communication": {
+    "formula": {
+      "events": {
+        "all_reduce": 15,
+        "all_gather": 10,
+        "reduce_scatter": 10
+      },
+      "elements_per_rank": {
+        "all_reduce": 665.0,
+        "all_gather": 960.0,
+        "reduce_scatter": 960.0
+      },
+      "bytes_per_rank": {
+        "all_reduce": 5320.0,
+        "all_gather": 7680.0,
+        "reduce_scatter": 7680.0
+      },
+      "total_bytes_cluster": {
+        "all_reduce": 10640.0,
+        "all_gather": 15360.0,
+        "reduce_scatter": 15360.0
+      }
+    },
+    "events": [
+      {
+        "name": "all_reduce",
+        "layer": "vocab.embed.ar",
+        "shape": [],
+        "elements_per_rank": 216,
+        "bytes_per_rank": 1728.0,
+        "total_bytes": 3456.0
+      },
+      {
+        "name": "reduce_scatter",
+        "layer": "vocab.embed.rs",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 768.0,
+        "total_bytes": 1536.0
+      },
+      {
+        "name": "all_gather",
+        "layer": "block0.attn.qkv.ag",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 768.0,
+        "total_bytes": 1536.0
+      },
+      {
+        "name": "reduce_scatter",
+        "layer": "block0.attn.out.rs",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 768.0,
+        "total_bytes": 1536.0
+      },
+      {
+        "name": "all_gather",
+        "layer": "block0.fc1.ag",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 768.0,
+        "total_bytes": 1536.0
+      },
+      {
+        "name": "reduce_scatter",
+        "layer": "block0.fc2.rs",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 768.0,
+        "total_bytes": 1536.0
+      },
+      {
+        "name": "all_gather",
+        "layer": "block1.attn.qkv.ag",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 768.0,
+        "total_bytes": 1536.0
+      },
+      {
+        "name": "reduce_scatter",
+        "layer": "block1.attn.out.rs",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 768.0,
+        "total_bytes": 1536.0
+      },
+      {
+        "name": "all_gather",
+        "layer": "block1.fc1.ag",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 768.0,
+        "total_bytes": 1536.0
+      },
+      {
+        "name": "reduce_scatter",
+        "layer": "block1.fc2.rs",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 768.0,
+        "total_bytes": 1536.0
+      },
+      {
+        "name": "all_gather",
+        "layer": "output.ag",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 768.0,
+        "total_bytes": 1536.0
+      },
+      {
+        "name": "all_reduce",
+        "layer": "ce.max",
+        "shape": [],
+        "elements_per_rank": 8,
+        "bytes_per_rank": 64.0,
+        "total_bytes": 128.0
+      },
+      {
+        "name": "all_reduce",
+        "layer": "ce.sumexp",
+        "shape": [],
+        "elements_per_rank": 8,
+        "bytes_per_rank": 64.0,
+        "total_bytes": 128.0
+      },
+      {
+        "name": "all_reduce",
+        "layer": "ce.loss_sum",
+        "shape": [],
+        "elements_per_rank": 1,
+        "bytes_per_rank": 8.0,
+        "total_bytes": 16.0
+      },
+      {
+        "name": "all_reduce",
+        "layer": "vocab.logits.dh.ar",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 1536.0,
+        "total_bytes": 3072.0
+      },
+      {
+        "name": "reduce_scatter",
+        "layer": "output.rs.bwd",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 768.0,
+        "total_bytes": 1536.0
+      },
+      {
+        "name": "all_reduce",
+        "layer": "ln_f.dgamma",
+        "shape": [],
+        "elements_per_rank": 24,
+        "bytes_per_rank": 192.0,
+        "total_bytes": 384.0
+      },
+      {
+        "name": "all_reduce",
+        "layer": "ln_f.dbeta",
+        "shape": [],
+        "elements_per_rank": 24,
+        "bytes_per_rank": 192.0,
+        "total_bytes": 384.0
+      },
+      {
+        "name": "all_gather",
+        "layer": "block1.fc2.ag.bwd",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 768.0,
+        "total_bytes": 1536.0
+      },
+      {
+        "name": "reduce_scatter",
+        "layer": "block1.fc1.rs.bwd",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 768.0,
+        "total_bytes": 1536.0
+      },
+      {
+        "name": "all_reduce",
+        "layer": "block1.ln2.dgamma",
+        "shape": [],
+        "elements_per_rank": 24,
+        "bytes_per_rank": 192.0,
+        "total_bytes": 384.0
+      },
+      {
+        "name": "all_reduce",
+        "layer": "block1.ln2.dbeta",
+        "shape": [],
+        "elements_per_rank": 24,
+        "bytes_per_rank": 192.0,
+        "total_bytes": 384.0
+      },
+      {
+        "name": "all_gather",
+        "layer": "block1.attn.out.ag.bwd",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 768.0,
+        "total_bytes": 1536.0
+      },
+      {
+        "name": "reduce_scatter",
+        "layer": "block1.attn.qkv.rs.bwd",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 768.0,
+        "total_bytes": 1536.0
+      },
+      {
+        "name": "all_reduce",
+        "layer": "block1.ln1.dgamma",
+        "shape": [],
+        "elements_per_rank": 24,
+        "bytes_per_rank": 192.0,
+        "total_bytes": 384.0
+      },
+      {
+        "name": "all_reduce",
+        "layer": "block1.ln1.dbeta",
+        "shape": [],
+        "elements_per_rank": 24,
+        "bytes_per_rank": 192.0,
+        "total_bytes": 384.0
+      },
+      {
+        "name": "all_gather",
+        "layer": "block0.fc2.ag.bwd",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 768.0,
+        "total_bytes": 1536.0
+      },
+      {
+        "name": "reduce_scatter",
+        "layer": "block0.fc1.rs.bwd",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 768.0,
+        "total_bytes": 1536.0
+      },
+      {
+        "name": "all_reduce",
+        "layer": "block0.ln2.dgamma",
+        "shape": [],
+        "elements_per_rank": 24,
+        "bytes_per_rank": 192.0,
+        "total_bytes": 384.0
+      },
+      {
+        "name": "all_reduce",
+        "layer": "block0.ln2.dbeta",
+        "shape": [],
+        "elements_per_rank": 24,
+        "bytes_per_rank": 192.0,
+        "total_bytes": 384.0
+      },
+      {
+        "name": "all_gather",
+        "layer": "block0.attn.out.ag.bwd",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 768.0,
+        "total_bytes": 1536.0
+      },
+      {
+        "name": "reduce_scatter",
+        "layer": "block0.attn.qkv.rs.bwd",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 768.0,
+        "total_bytes": 1536.0
+      },
+      {
+        "name": "all_reduce",
+        "layer": "block0.ln1.dgamma",
+        "shape": [],
+        "elements_per_rank": 24,
+        "bytes_per_rank": 192.0,
+        "total_bytes": 384.0
+      },
+      {
+        "name": "all_reduce",
+        "layer": "block0.ln1.dbeta",
+        "shape": [],
+        "elements_per_rank": 24,
+        "bytes_per_rank": 192.0,
+        "total_bytes": 384.0
+      },
+      {
+        "name": "all_gather",
+        "layer": "vocab.embed.ag.bwd",
+        "shape": [],
+        "elements_per_rank": 192,
+        "bytes_per_rank": 768.0,
+        "total_bytes": 1536.0
+      }
+    ]
+  },
+  "loss_curve": [
+    3.6930372440785435,
+    2.772843761924706,
+    1.7206055242718274,
+    1.341785967799296,
+    2.073938628157922,
+    1.1436472413230496,
+    0.7220463769087313,
+    0.5274313490332591,
+    0.4483246876032734,
+    0.3414624679584233,
+    0.2858394904629987,
+    0.24744127660544057,
+    0.21850895340532572,
+    0.19561186424383936,
+    0.1770053839865009,
+    0.16158022080846923,
+    0.14858381241809693,
+    0.1374849170595206,
+    0.12789711090781586,
+    0.11953234845839866,
+    0.11217143774599625,
+    0.10564459346123456,
+    0.09981824683889451,
+    0.09458587421767883,
+    0.08986148121034121,
+    0.08557488523046253,
+    0.08166824217431357,
+    0.07809345030868464,
+    0.07481018322483612,
+    0.07178438087472305,
+    0.06898707885710942,
+    0.06639349066747446,
+    0.06398228135287887,
+    0.06173498756137208,
+    0.05963555068092152,
+    0.05766993815081467,
+    0.05582583411201181,
+    0.05409238502475011,
+    0.052459989188352596,
+    0.05092012157278747,
+    0.04946518724036175,
+    0.048088398059427884,
+    0.04678366850507465,
+    0.04554552718746396,
+    0.04436904140754505,
+    0.04324975255692698,
+    0.042183620586981996,
+    0.041166976096589036,
+    0.040196478847096984,
+    0.039269081721292176,
+    0.03838199931131159,
+    0.03753268045693503,
+    0.03671878416698249,
+    0.03593815844772996,
+    0.0351888216372811,
+    0.03446894590681193,
+    0.03377684264101577,
+    0.033110949452893945,
+    0.03246981862380349,
+    0.03185210678968298,
+    0.03125656571962265,
+    0.030682034054255736,
+    0.03012742988949879,
+    0.02959174410650456,
+    0.029074034361742496,
+    0.02857341966228777,
+    0.02808907546094952,
+    0.027620229214083247,
+    0.027166156351994597,
+    0.026726176617940856,
+    0.026299650737017566,
+    0.025885977380790126,
+    0.02548459039750295,
+    0.025094956281174197,
+    0.024716571855889935,
+    0.02434896215426785,
+    0.023991678471371403,
+    0.02364429657738687,
+    0.023306415074166753,
+    0.02297765388231854
+  ]
+}

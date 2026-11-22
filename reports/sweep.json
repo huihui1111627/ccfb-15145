@@ -1,0 +1,434 @@
+[
+  {
+    "config": {
+      "layers": 2,
+      "heads": 8,
+      "hidden": 32,
+      "ff": 128,
+      "vocab": 49,
+      "world_size": 4,
+      "seq_len": 21
+    },
+    "peak_bytes_rank0": 174592.0,
+    "comm_bytes_per_rank": 96876.0,
+    "comm_events": {
+      "all_reduce": 15,
+      "all_gather": 10,
+      "reduce_scatter": 10
+    }
+  },
+  {
+    "config": {
+      "layers": 1,
+      "heads": 2,
+      "hidden": 16,
+      "ff": 64,
+      "vocab": 55,
+      "world_size": 1,
+      "seq_len": 3
+    },
+    "peak_bytes_rank0": 70208.0,
+    "comm_bytes_per_rank": 0.0,
+    "comm_events": {
+      "all_reduce": 11,
+      "all_gather": 6,
+      "reduce_scatter": 6
+    }
+  },
+  {
+    "config": {
+      "layers": 3,
+      "heads": 2,
+      "hidden": 32,
+      "ff": 64,
+      "vocab": 33,
+      "world_size": 2,
+      "seq_len": 11
+    },
+    "peak_bytes_rank0": 262240.0,
+    "comm_bytes_per_rank": 44968.0,
+    "comm_events": {
+      "all_reduce": 19,
+      "all_gather": 14,
+      "reduce_scatter": 14
+    }
+  },
+  {
+    "config": {
+      "layers": 2,
+      "heads": 2,
+      "hidden": 32,
+      "ff": 64,
+      "vocab": 59,
+      "world_size": 2,
+      "seq_len": 7
+    },
+    "peak_bytes_rank0": 172352.0,
+    "comm_bytes_per_rank": 21352.0,
+    "comm_events": {
+      "all_reduce": 15,
+      "all_gather": 10,
+      "reduce_scatter": 10
+    }
+  },
+  {
+    "config": {
+      "layers": 2,
+      "heads": 4,
+      "hidden": 24,
+      "ff": 96,
+      "vocab": 59,
+      "world_size": 2,
+      "seq_len": 11
+    },
+    "peak_bytes_rank0": 161600.0,
+    "comm_bytes_per_rank": 25320.0,
+    "comm_events": {
+      "all_reduce": 15,
+      "all_gather": 10,
+      "reduce_scatter": 10
+    }
+  },
+  {
+    "config": {
+      "layers": 3,
+      "heads": 8,
+      "hidden": 24,
+      "ff": 96,
+      "vocab": 33,
+      "world_size": 4,
+      "seq_len": 9
+    },
+    "peak_bytes_rank0": 119136.0,
+    "comm_bytes_per_rank": 41388.0,
+    "comm_events": {
+      "all_reduce": 19,
+      "all_gather": 14,
+      "reduce_scatter": 14
+    }
+  },
+  {
+    "config": {
+      "layers": 1,
+      "heads": 8,
+      "hidden": 24,
+      "ff": 48,
+      "vocab": 13,
+      "world_size": 4,
+      "seq_len": 13
+    },
+    "peak_bytes_rank0": 34272.0,
+    "comm_bytes_per_rank": 29964.0,
+    "comm_events": {
+      "all_reduce": 11,
+      "all_gather": 6,
+      "reduce_scatter": 6
+    }
+  },
+  {
+    "config": {
+      "layers": 1,
+      "heads": 4,
+      "hidden": 32,
+      "ff": 64,
+      "vocab": 50,
+      "world_size": 1,
+      "seq_len": 6
+    },
+    "peak_bytes_rank0": 175904.0,
+    "comm_bytes_per_rank": 0.0,
+    "comm_events": {
+      "all_reduce": 11,
+      "all_gather": 6,
+      "reduce_scatter": 6
+    }
+  },
+  {
+    "config": {
+      "layers": 2,
+      "heads": 4,
+      "hidden": 24,
+      "ff": 48,
+      "vocab": 35,
+      "world_size": 4,
+      "seq_len": 13
+    },
+    "peak_bytes_rank0": 65280.0,
+    "comm_bytes_per_rank": 44940.0,
+    "comm_events": {
+      "all_reduce": 15,
+      "all_gather": 10,
+      "reduce_scatter": 10
+    }
+  },
+  {
+    "config": {
+      "layers": 3,
+      "heads": 2,
+      "hidden": 16,
+      "ff": 32,
+      "vocab": 58,
+      "world_size": 1,
+      "seq_len": 5
+    },
+    "peak_bytes_rank0": 135680.0,
+    "comm_bytes_per_rank": 0.0,
+    "comm_events": {
+      "all_reduce": 19,
+      "all_gather": 14,
+      "reduce_scatter": 14
+    }
+  },
+  {
+    "config": {
+      "layers": 1,
+      "heads": 8,
+      "hidden": 24,
+      "ff": 48,
+      "vocab": 11,
+      "world_size": 4,
+      "seq_len": 17
+    },
+    "peak_bytes_rank0": 38752.0,
+    "comm_bytes_per_rank": 39276.0,
+    "comm_events": {
+      "all_reduce": 11,
+      "all_gather": 6,
+      "reduce_scatter": 6
+    }
+  },
+  {
+    "config": {
+      "layers": 2,
+      "heads": 4,
+      "hidden": 24,
+      "ff": 48,
+      "vocab": 58,
+      "world_size": 4,
+      "seq_len": 21
+    },
+    "peak_bytes_rank0": 83584.0,
+    "comm_bytes_per_rank": 72780.0,
+    "comm_events": {
+      "all_reduce": 15,
+      "all_gather": 10,
+      "reduce_scatter": 10
+    }
+  },
+  {
+    "config": {
+      "layers": 2,
+      "heads": 8,
+      "hidden": 32,
+      "ff": 128,
+      "vocab": 42,
+      "world_size": 1,
+      "seq_len": 3
+    },
+    "peak_bytes_rank0": 441344.0,
+    "comm_bytes_per_rank": 0.0,
+    "comm_events": {
+      "all_reduce": 15,
+      "all_gather": 10,
+      "reduce_scatter": 10
+    }
+  },
+  {
+    "config": {
+      "layers": 1,
+      "heads": 4,
+      "hidden": 32,
+      "ff": 128,
+      "vocab": 41,
+      "world_size": 1,
+      "seq_len": 6
+    },
+    "peak_bytes_rank0": 242976.0,
+    "comm_bytes_per_rank": 0.0,
+    "comm_events": {
+      "all_reduce": 11,
+      "all_gather": 6,
+      "reduce_scatter": 6
+    }
+  },
+  {
+    "config": {
+      "layers": 1,
+      "heads": 4,
+      "hidden": 24,
+      "ff": 96,
+      "vocab": 26,
+      "world_size": 1,
+      "seq_len": 3
+    },
+    "peak_bytes_rank0": 131072.0,
+    "comm_bytes_per_rank": 0.0,
+    "comm_events": {
+      "all_reduce": 11,
+      "all_gather": 6,
+      "reduce_scatter": 6
+    }
+  },
+  {
+    "config": {
+      "layers": 2,
+      "heads": 8,
+      "hidden": 24,
+      "ff": 48,
+      "vocab": 39,
+      "world_size": 1,
+      "seq_len": 6
+    },
+    "peak_bytes_rank0": 191552.0,
+    "comm_bytes_per_rank": 0.0,
+    "comm_events": {
+      "all_reduce": 15,
+      "all_gather": 10,
+      "reduce_scatter": 10
+    }
+  },
+  {
+    "config": {
+      "layers": 2,
+      "heads": 4,
+      "hidden": 24,
+      "ff": 48,
+      "vocab": 42,
+      "world_size": 2,
+      "seq_len": 9
+    },
+    "peak_bytes_rank0": 107264.0,
+    "comm_bytes_per_rank": 20680.0,
+    "comm_events": {
+      "all_reduce": 15,
+      "all_gather": 10,
+      "reduce_scatter": 10
+    }
+  },
+  {
+    "config": {
+      "layers": 2,
+      "heads": 4,
+      "hidden": 24,
+      "ff": 48,
+      "vocab": 13,
+      "world_size": 1,
+      "seq_len": 4
+    },
+    "peak_bytes_rank0": 171648.0,
+    "comm_bytes_per_rank": 0.0,
+    "comm_events": {
+      "all_reduce": 15,
+      "all_gather": 10,
+      "reduce_scatter": 10
+    }
+  },
+  {
+    "config": {
+      "layers": 1,
+      "heads": 4,
+      "hidden": 32,
+      "ff": 128,
+      "vocab": 21,
+      "world_size": 4,
+      "seq_len": 9
+    },
+    "peak_bytes_rank0": 66944.0,
+    "comm_bytes_per_rank": 27468.0,
+    "comm_events": {
+      "all_reduce": 11,
+      "all_gather": 6,
+      "reduce_scatter": 6
+    }
+  },
+  {
+    "config": {
+      "layers": 2,
+      "heads": 8,
+      "hidden": 16,
+      "ff": 64,
+      "vocab": 37,
+      "world_size": 2,
+      "seq_len": 5
+    },
+    "peak_bytes_rank0": 67328.0,
+    "comm_bytes_per_rank": 7624.0,
+    "comm_events": {
+      "all_reduce": 15,
+      "all_gather": 10,
+      "reduce_scatter": 10
+    }
+  },
+  {
+    "config": {
+      "layers": 3,
+      "heads": 4,
+      "hidden": 32,
+      "ff": 128,
+      "vocab": 55,
+      "world_size": 4,
+      "seq_len": 21
+    },
+    "peak_bytes_rank0": 248320.0,
+    "comm_bytes_per_rank": 129132.0,
+    "comm_events": {
+      "all_reduce": 19,
+      "all_gather": 14,
+      "reduce_scatter": 14
+    }
+  },
+  {
+    "config": {
+      "layers": 2,
+      "heads": 2,
+      "hidden": 32,
+      "ff": 128,
+      "vocab": 23,
+      "world_size": 1,
+      "seq_len": 5
+    },
+    "peak_bytes_rank0": 445440.0,
+    "comm_bytes_per_rank": 0.0,
+    "comm_events": {
+      "all_reduce": 15,
+      "all_gather": 10,
+      "reduce_scatter": 10
+    }
+  },
+  {
+    "config": {
+      "layers": 1,
+      "heads": 4,
+      "hidden": 32,
+      "ff": 128,
+      "vocab": 42,
+      "world_size": 1,
+      "seq_len": 5
+    },
+    "peak_bytes_rank0": 239616.0,
+    "comm_bytes_per_rank": 0.0,
+    "comm_events": {
+      "all_reduce": 11,
+      "all_gather": 6,
+      "reduce_scatter": 6
+    }
+  },
+  {
+    "config": {
+      "layers": 3,
+      "heads": 4,
+      "hidden": 16,
+      "ff": 32,
+      "vocab": 45,
+      "world_size": 2,
+      "seq_len": 5
+    },
+    "peak_bytes_rank0": 70016.0,
+    "comm_bytes_per_rank": 10184.0,
+    "comm_events": {
+      "all_reduce": 19,
+      "all_gather": 14,
+      "reduce_scatter": 14
+    }
+  }
+]

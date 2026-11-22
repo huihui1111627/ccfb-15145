@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>张量并行训练框架 · 切分与通信可视化</title>
+<style>
+  :root {
+    --bg:#0f1419; --panel:#1a212b; --panel2:#222c38; --line:#2d3947;
+    --text:#e6edf3; --muted:#8b98a5; --accent:#4ea1ff; --accent2:#57d9a3;
+    --warn:#ffb454; --ar:#4ea1ff; --ag:#57d9a3; --rs:#c792ea;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",Segoe UI,sans-serif;
+    line-height:1.55;
+  }
+  header { padding:28px 32px 18px; border-bottom:1px solid var(--line); }
+  header h1 { margin:0 0 6px; font-size:22px; }
+  header .sub { color:var(--muted); font-size:13px; }
+  .cfg-chips { margin-top:12px; display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { background:var(--panel2); border:1px solid var(--line);
+    border-radius:14px; padding:3px 12px; font-size:12px; color:var(--muted); }
+  .chip b { color:var(--text); }
+  main { padding:24px 32px 60px; max-width:1280px; margin:0 auto; }
+  section { background:var(--panel); border:1px solid var(--line);
+    border-radius:12px; padding:20px 22px; margin-bottom:24px; }
+  section h2 { margin:0 0 4px; font-size:17px; display:flex; align-items:center; gap:8px; }
+  section h2 .num { background:var(--accent); color:#08111c; width:22px; height:22px;
+    border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
+    font-size:13px; font-weight:700; }
+  section .desc { color:var(--muted); font-size:12.5px; margin:0 0 16px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th,td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line);
+    vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12px; }
+  td.mono, .mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:10px; font-size:11px;
+    font-family:ui-monospace,monospace; }
+  .tag.ar { background:rgba(78,161,255,.15); color:var(--ar); }
+  .tag.ag { background:rgba(87,217,163,.15); color:var(--ag); }
+  .tag.rs { background:rgba(199,146,234,.15); color:var(--rs); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  .card { background:var(--panel2); border:1px solid var(--line);
+    border-radius:10px; padding:14px 16px; }
+  .card h3 { margin:0 0 10px; font-size:13.5px; color:var(--muted); font-weight:600; }
+  .bar-row { display:flex; align-items:center; gap:10px; margin:8px 0; font-size:12.5px; }
+  .bar-row .lbl { width:130px; color:var(--muted); flex-shrink:0; }
+  .bar-track { flex:1; background:#0d1218; border-radius:6px; height:18px; overflow:hidden; }
+  .bar-fill { height:100%; border-radius:6px; }
+  .bar-val { width:110px; text-align:right; font-family:ui-monospace,monospace; font-size:11.5px; }
+  .legend { display:flex; gap:16px; margin:6px 0 14px; font-size:12px; color:var(--muted); }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .dot { width:10px; height:10px; border-radius:2px; display:inline-block; }
+  svg { width:100%; height:auto; display:block; }
+  .axis { stroke:var(--muted); stroke-width:1; }
+  .gridline { stroke:var(--line); stroke-width:1; stroke-dasharray:3 4; }
+  .axlabel { fill:var(--muted); font-size:11px; }
+  .loss-line { fill:none; stroke:var(--accent2); stroke-width:2.2; }
+  .comm-bar { stroke-width:0; }
+  .summary-num { font-family:ui-monospace,monospace; color:var(--accent); }
+  .muted { color:var(--muted); }
+  .ok { color:var(--accent2); font-weight:600; }
+  .scroll { overflow-x:auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>玻璃温室花卉育种语言模型 · 张量并行切分与通信可视化</h1>
+  <div class="sub">numpy 模拟多卡 + 模拟集合通信（环形通信量记账）｜所有前向损失与参数梯度均与单卡不切分参考实现在 float64 机器精度内一致</div>
+  <div class="cfg-chips" id="cfgChips"></div>
+</header>
+<main>
+
+  <section>
+    <h2><span class="num">1</span>每层的切分方式</h2>
+    <p class="desc">列切（按输出维/头）与行切（按输入维）配对，配对之间无通信，只在行切出口做一次归约分散；词表按词维切，序列并行沿 token 维切。</p>
+    <div class="scroll"><table id="planTable">
+      <thead><tr><th>层 / 模块</th><th>切分方式</th><th>前向通信</th><th>反向通信</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2><span class="num">2</span>每张卡上的权重与激活大小</h2>
+    <p class="desc">字节 = 元素数 × 8（float64）。权重/梯度按各卡等分口径，激活为前向结束时保留到反向的张量。</p>
+    <div class="grid2">
+      <div class="card">
+        <h3>每卡显存构成（字节）</h3>
+        <div class="legend">
+          <span><i class="dot" style="background:#4ea1ff"></i>权重</span>
+          <span><i class="dot" style="background:#ffb454"></i>梯度</span>
+          <span><i class="dot" style="background:#57d9a3"></i>激活</span>
+        </div>
+        <div id="memBars"></div>
+      </div>
+      <div class="card">
+        <h3>权重参数元素数明细（每卡）</h3>
+        <div id="weightBars"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:20px">
+      <h3>保留到反向的激活张量明细（rank 0）</h3>
+      <div class="scroll"><table id="actTable">
+        <thead><tr><th>激活张量</th><th>元素数</th><th>字节</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">3</span>每步各类集合操作的通信量</h2>
+    <p class="desc">环形公式：all-reduce = 2(P−1)/P·n，all-gather / reduce-scatter = (P−1)/P·n_full。下表的公式值与运行时实测记账逐项相等。</p>
+    <div class="grid2">
+      <div class="card">
+        <h3>每卡每步通信量（按操作类型）</h3>
+        <div id="commBars"></div>
+        <div class="legend" style="margin-top:12px">
+          <span><i class="dot" style="background:var(--ar)"></i>all-reduce</span>
+          <span><i class="dot" style="background:var(--ag)"></i>all-gather</span>
+          <span><i class="dot" style="background:var(--rs)"></i>reduce-scatter</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>每步集合操作次数与通信事件</h3>
+        <table id="commCountTable">
+          <thead><tr><th>操作</th><th>次数</th><th>每卡字节</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card" style="margin-top:20px">
+      <h3>逐事件通信流水（前向 → 反向）</h3>
+      <div class="scroll"><table id="eventTable">
+        <thead><tr><th>#</th><th>操作</th><th>来源层</th><th>每卡元素</th><th>每卡字节</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">4</span>训练损失曲线</h2>
+    <p class="desc">固定一批随机 token，SGD 训练 80 步。损失持续下降说明分片前向 + 手写反向的梯度方向正确。</p>
+    <svg id="lossSvg" viewBox="0 0 900 320" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="legend" style="margin-top:8px">
+      <span>起始损失 <b class="summary-num" id="lossStart"></b></span>
+      <span>结束损失 <b class="summary-num" id="lossEnd"></b></span>
+      <span>下降 <b class="ok" id="lossDrop"></b></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>附：随机配置扫描（峰值显存 vs 通信量）</h2>
+    <p class="desc">24 组随机 (层数/头数/词表/卡数/序列长) 组合，每组都通过单卡参考对账。</p>
+    <svg id="sweepSvg" viewBox="0 0 900 340" preserveAspectRatio="xMidYMid meet"></svg>
+  </section>
+
+</main>
+<script>
+const DATA = {"config": {"layers": 2, "heads": 4, "hidden": 24, "ff": 48, "vocab": 31, "world_size": 2, "seq_len": 9, "dropout": 0.0}, "layer_plan": [{"layer": "词嵌入/输出权重（共享）", "sharding": "按词表切：每卡 16 行（含 padding）× H=24", "comm_fwd": "嵌入 all-reduce + reduce-scatter；输出前 all-gather；CE 3 次 all-reduce", "comm_bwd": "输出 dh all-reduce + reduce-scatter；嵌入 all-gather"}, {"layer": "LayerNorm ×(2L+1) / Dropout / GELU / 残差", "sharding": "按序列长度切：每卡 (S-1)/P 个 token；gamma/beta 复制", "comm_fwd": "无（LN 复制参数梯度在反向 all-reduce）", "comm_bwd": "每个 LN 2 次 all-reduce（dgamma、dbeta）"}, {"layer": "block0 QKV（列切）", "sharding": "W 24×36、偏置 36；按头切 2/4 头", "comm_fwd": "入口 all-gather 序列", "comm_bwd": "出口 reduce-scatter"}, {"layer": "block0 注意力内部", "sharding": "每卡 2 个头，完整序列上算 softmax", "comm_fwd": "无", "comm_bwd": "无"}, {"layer": "block0 输出 O（行切）", "sharding": "W 12×24，无偏置", "comm_fwd": "出口 reduce-scatter（替代全归约）", "comm_bwd": "入口 all-gather"}, {"layer": "block0 FC1（列切）", "sharding": "W 24×24、偏置 24", "comm_fwd": "入口 all-gather", "comm_bwd": "出口 reduce-scatter"}, {"layer": "block0 FC2（行切）", "sharding": "W 24×24，无偏置", "comm_fwd": "出口 reduce-scatter", "comm_bwd": "入口 all-gather"}, {"layer": "block1 QKV（列切）", "sharding": "W 24×36、偏置 36；按头切 2/4 头", "comm_fwd": "入口 all-gather 序列", "comm_bwd": "出口 reduce-scatter"}, {"layer": "block1 注意力内部", "sharding": "每卡 2 个头，完整序列上算 softmax", "comm_fwd": "无", "comm_bwd": "无"}, {"layer": "block1 输出 O（行切）", "sharding": "W 12×24，无偏置", "comm_fwd": "出口 reduce-scatter（替代全归约）", "comm_bwd": "入口 all-gather"}, {"layer": "block1 FC1（列切）", "sharding": "W 24×24、偏置 24", "comm_fwd": "入口 all-gather", "comm_bwd": "出口 reduce-scatter"}, {"layer": "block1 FC2（行切）", "sharding": "W 24×24，无偏置", "comm_fwd": "出口 reduce-scatter", "comm_bwd": "入口 all-gather"}], "memory": {"weight_breakdown_elems": {"vocab.weight": 384, "layernorm": 240, "blocks": 4728}, "per_rank": [{"rank": 0, "param_bytes": 42816.0, "grad_bytes": 42816.0, "activation_bytes": 19712.0, "peak_bytes": 105344.0}, {"rank": 1, "param_bytes": 42816.0, "grad_bytes": 42816.0, "activation_bytes": 19712.0, "peak_bytes": 105344.0}], "activation_items": [{"name": "block0.ln1.xhat", "elements": 96, "bytes": 768.0}, {"name": "block0.qkv.x_full", "elements": 192, "bytes": 1536.0}, {"name": "block0.attn.probs", "elements": 128, "bytes": 1024.0}, {"name": "block0.attn.out.x_full", "elements": 96, "bytes": 768.0}, {"name": "block0.ln2.xhat", "elements": 96, "bytes": 768.0}, {"name": "block0.fc1.x_full", "elements": 192, "bytes": 1536.0}, {"name": "block0.gelu", "elements": 192, "bytes": 1536.0}, {"name": "block0.fc2.x_full", "elements": 192, "bytes": 1536.0}, {"name": "block1.ln1.xhat", "elements": 96, "bytes": 768.0}, {"name": "block1.qkv.x_full", "elements": 192, "bytes": 1536.0}, {"name": "block1.attn.probs", "elements": 128, "bytes": 1024.0}, {"name": "block1.attn.out.x_full", "elements": 96, "bytes": 768.0}, {"name": "block1.ln2.xhat", "elements": 96, "bytes": 768.0}, {"name": "block1.fc1.x_full", "elements": 192, "bytes": 1536.0}, {"name": "block1.gelu", "elements": 192, "bytes": 1536.0}, {"name": "block1.fc2.x_full", "elements": 192, "bytes": 1536.0}, {"name": "ln_f.xhat", "elements": 96, "bytes": 768.0}]}, "communication": {"formula": {"events": {"all_reduce": 15, "all_gather": 10, "reduce_scatter": 10}, "elements_per_rank": {"all_reduce": 665.0, "all_gather": 960.0, "reduce_scatter": 960.0}, "bytes_per_rank": {"all_reduce": 5320.0, "all_gather": 7680.0, "reduce_scatter": 7680.0}, "total_bytes_cluster": {"all_reduce": 10640.0, "all_gather": 15360.0, "reduce_scatter": 15360.0}}, "events": [{"name": "all_reduce", "layer": "vocab.embed.ar", "shape": [], "elements_per_rank": 216, "bytes_per_rank": 1728.0, "total_bytes": 3456.0}, {"name": "reduce_scatter", "layer": "vocab.embed.rs", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 768.0, "total_bytes": 1536.0}, {"name": "all_gather", "layer": "block0.attn.qkv.ag", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 768.0, "total_bytes": 1536.0}, {"name": "reduce_scatter", "layer": "block0.attn.out.rs", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 768.0, "total_bytes": 1536.0}, {"name": "all_gather", "layer": "block0.fc1.ag", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 768.0, "total_bytes": 1536.0}, {"name": "reduce_scatter", "layer": "block0.fc2.rs", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 768.0, "total_bytes": 1536.0}, {"name": "all_gather", "layer": "block1.attn.qkv.ag", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 768.0, "total_bytes": 1536.0}, {"name": "reduce_scatter", "layer": "block1.attn.out.rs", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 768.0, "total_bytes": 1536.0}, {"name": "all_gather", "layer": "block1.fc1.ag", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 768.0, "total_bytes": 1536.0}, {"name": "reduce_scatter", "layer": "block1.fc2.rs", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 768.0, "total_bytes": 1536.0}, {"name": "all_gather", "layer": "output.ag", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 768.0, "total_bytes": 1536.0}, {"name": "all_reduce", "layer": "ce.max", "shape": [], "elements_per_rank": 8, "bytes_per_rank": 64.0, "total_bytes": 128.0}, {"name": "all_reduce", "layer": "ce.sumexp", "shape": [], "elements_per_rank": 8, "bytes_per_rank": 64.0, "total_bytes": 128.0}, {"name": "all_reduce", "layer": "ce.loss_sum", "shape": [], "elements_per_rank": 1, "bytes_per_rank": 8.0, "total_bytes": 16.0}, {"name": "all_reduce", "layer": "vocab.logits.dh.ar", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 1536.0, "total_bytes": 3072.0}, {"name": "reduce_scatter", "layer": "output.rs.bwd", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 768.0, "total_bytes": 1536.0}, {"name": "all_reduce", "layer": "ln_f.dgamma", "shape": [], "elements_per_rank": 24, "bytes_per_rank": 192.0, "total_bytes": 384.0}, {"name": "all_reduce", "layer": "ln_f.dbeta", "shape": [], "elements_per_rank": 24, "bytes_per_rank": 192.0, "total_bytes": 384.0}, {"name": "all_gather", "layer": "block1.fc2.ag.bwd", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 768.0, "total_bytes": 1536.0}, {"name": "reduce_scatter", "layer": "block1.fc1.rs.bwd", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 768.0, "total_bytes": 1536.0}, {"name": "all_reduce", "layer": "block1.ln2.dgamma", "shape": [], "elements_per_rank": 24, "bytes_per_rank": 192.0, "total_bytes": 384.0}, {"name": "all_reduce", "layer": "block1.ln2.dbeta", "shape": [], "elements_per_rank": 24, "bytes_per_rank": 192.0, "total_bytes": 384.0}, {"name": "all_gather", "layer": "block1.attn.out.ag.bwd", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 768.0, "total_bytes": 1536.0}, {"name": "reduce_scatter", "layer": "block1.attn.qkv.rs.bwd", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 768.0, "total_bytes": 1536.0}, {"name": "all_reduce", "layer": "block1.ln1.dgamma", "shape": [], "elements_per_rank": 24, "bytes_per_rank": 192.0, "total_bytes": 384.0}, {"name": "all_reduce", "layer": "block1.ln1.dbeta", "shape": [], "elements_per_rank": 24, "bytes_per_rank": 192.0, "total_bytes": 384.0}, {"name": "all_gather", "layer": "block0.fc2.ag.bwd", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 768.0, "total_bytes": 1536.0}, {"name": "reduce_scatter", "layer": "block0.fc1.rs.bwd", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 768.0, "total_bytes": 1536.0}, {"name": "all_reduce", "layer": "block0.ln2.dgamma", "shape": [], "elements_per_rank": 24, "bytes_per_rank": 192.0, "total_bytes": 384.0}, {"name": "all_reduce", "layer": "block0.ln2.dbeta", "shape": [], "elements_per_rank": 24, "bytes_per_rank": 192.0, "total_bytes": 384.0}, {"name": "all_gather", "layer": "block0.attn.out.ag.bwd", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 768.0, "total_bytes": 1536.0}, {"name": "reduce_scatter", "layer": "block0.attn.qkv.rs.bwd", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 768.0, "total_bytes": 1536.0}, {"name": "all_reduce", "layer": "block0.ln1.dgamma", "shape": [], "elements_per_rank": 24, "bytes_per_rank": 192.0, "total_bytes": 384.0}, {"name": "all_reduce", "layer": "block0.ln1.dbeta", "shape": [], "elements_per_rank": 24, "bytes_per_rank": 192.0, "total_bytes": 384.0}, {"name": "all_gather", "layer": "vocab.embed.ag.bwd", "shape": [], "elements_per_rank": 192, "bytes_per_rank": 768.0, "total_bytes": 1536.0}]}, "loss_curve": [3.6930372440785435, 2.772843761924706, 1.7206055242718274, 1.341785967799296, 2.073938628157922, 1.1436472413230496, 0.7220463769087313, 0.5274313490332591, 0.4483246876032734, 0.3414624679584233, 0.2858394904629987, 0.24744127660544057, 0.21850895340532572, 0.19561186424383936, 0.1770053839865009, 0.16158022080846923, 0.14858381241809693, 0.1374849170595206, 0.12789711090781586, 0.11953234845839866, 0.11217143774599625, 0.10564459346123456, 0.09981824683889451, 0.09458587421767883, 0.08986148121034121, 0.08557488523046253, 0.08166824217431357, 0.07809345030868464, 0.07481018322483612, 0.07178438087472305, 0.06898707885710942, 0.06639349066747446, 0.06398228135287887, 0.06173498756137208, 0.05963555068092152, 0.05766993815081467, 0.05582583411201181, 0.05409238502475011, 0.052459989188352596, 0.05092012157278747, 0.04946518724036175, 0.048088398059427884, 0.04678366850507465, 0.04554552718746396, 0.04436904140754505, 0.04324975255692698, 0.042183620586981996, 0.041166976096589036, 0.040196478847096984, 0.039269081721292176, 0.03838199931131159, 0.03753268045693503, 0.03671878416698249, 0.03593815844772996, 0.0351888216372811, 0.03446894590681193, 0.03377684264101577, 0.033110949452893945, 0.03246981862380349, 0.03185210678968298, 0.03125656571962265, 0.030682034054255736, 0.03012742988949879, 0.02959174410650456, 0.029074034361742496, 0.02857341966228777, 0.02808907546094952, 0.027620229214083247, 0.027166156351994597, 0.026726176617940856, 0.026299650737017566, 0.025885977380790126, 0.02548459039750295, 0.025094956281174197, 0.024716571855889935, 0.02434896215426785, 0.023991678471371403, 0.02364429657738687, 0.023306415074166753, 0.02297765388231854]};
+const SWEEP = [{"config": {"layers": 2, "heads": 8, "hidden": 32, "ff": 128, "vocab": 49, "world_size": 4, "seq_len": 21}, "peak_bytes_rank0": 174592.0, "comm_bytes_per_rank": 96876.0, "comm_events": {"all_reduce": 15, "all_gather": 10, "reduce_scatter": 10}}, {"config": {"layers": 1, "heads": 2, "hidden": 16, "ff": 64, "vocab": 55, "world_size": 1, "seq_len": 3}, "peak_bytes_rank0": 70208.0, "comm_bytes_per_rank": 0.0, "comm_events": {"all_reduce": 11, "all_gather": 6, "reduce_scatter": 6}}, {"config": {"layers": 3, "heads": 2, "hidden": 32, "ff": 64, "vocab": 33, "world_size": 2, "seq_len": 11}, "peak_bytes_rank0": 262240.0, "comm_bytes_per_rank": 44968.0, "comm_events": {"all_reduce": 19, "all_gather": 14, "reduce_scatter": 14}}, {"config": {"layers": 2, "heads": 2, "hidden": 32, "ff": 64, "vocab": 59, "world_size": 2, "seq_len": 7}, "peak_bytes_rank0": 172352.0, "comm_bytes_per_rank": 21352.0, "comm_events": {"all_reduce": 15, "all_gather": 10, "reduce_scatter": 10}}, {"config": {"layers": 2, "heads": 4, "hidden": 24, "ff": 96, "vocab": 59, "world_size": 2, "seq_len": 11}, "peak_bytes_rank0": 161600.0, "comm_bytes_per_rank": 25320.0, "comm_events": {"all_reduce": 15, "all_gather": 10, "reduce_scatter": 10}}, {"config": {"layers": 3, "heads": 8, "hidden": 24, "ff": 96, "vocab": 33, "world_size": 4, "seq_len": 9}, "peak_bytes_rank0": 119136.0, "comm_bytes_per_rank": 41388.0, "comm_events": {"all_reduce": 19, "all_gather": 14, "reduce_scatter": 14}}, {"config": {"layers": 1, "heads": 8, "hidden": 24, "ff": 48, "vocab": 13, "world_size": 4, "seq_len": 13}, "peak_bytes_rank0": 34272.0, "comm_bytes_per_rank": 29964.0, "comm_events": {"all_reduce": 11, "all_gather": 6, "reduce_scatter": 6}}, {"config": {"layers": 1, "heads": 4, "hidden": 32, "ff": 64, "vocab": 50, "world_size": 1, "seq_len": 6}, "peak_bytes_rank0": 175904.0, "comm_bytes_per_rank": 0.0, "comm_events": {"all_reduce": 11, "all_gather": 6, "reduce_scatter": 6}}, {"config": {"layers": 2, "heads": 4, "hidden": 24, "ff": 48, "vocab": 35, "world_size": 4, "seq_len": 13}, "peak_bytes_rank0": 65280.0, "comm_bytes_per_rank": 44940.0, "comm_events": {"all_reduce": 15, "all_gather": 10, "reduce_scatter": 10}}, {"config": {"layers": 3, "heads": 2, "hidden": 16, "ff": 32, "vocab": 58, "world_size": 1, "seq_len": 5}, "peak_bytes_rank0": 135680.0, "comm_bytes_per_rank": 0.0, "comm_events": {"all_reduce": 19, "all_gather": 14, "reduce_scatter": 14}}, {"config": {"layers": 1, "heads": 8, "hidden": 24, "ff": 48, "vocab": 11, "world_size": 4, "seq_len": 17}, "peak_bytes_rank0": 38752.0, "comm_bytes_per_rank": 39276.0, "comm_events": {"all_reduce": 11, "all_gather": 6, "reduce_scatter": 6}}, {"config": {"layers": 2, "heads": 4, "hidden": 24, "ff": 48, "vocab": 58, "world_size": 4, "seq_len": 21}, "peak_bytes_rank0": 83584.0, "comm_bytes_per_rank": 72780.0, "comm_events": {"all_reduce": 15, "all_gather": 10, "reduce_scatter": 10}}, {"config": {"layers": 2, "heads": 8, "hidden": 32, "ff": 128, "vocab": 42, "world_size": 1, "seq_len": 3}, "peak_bytes_rank0": 441344.0, "comm_bytes_per_rank": 0.0, "comm_events": {"all_reduce": 15, "all_gather": 10, "reduce_scatter": 10}}, {"config": {"layers": 1, "heads": 4, "hidden": 32, "ff": 128, "vocab": 41, "world_size": 1, "seq_len": 6}, "peak_bytes_rank0": 242976.0, "comm_bytes_per_rank": 0.0, "comm_events": {"all_reduce": 11, "all_gather": 6, "reduce_scatter": 6}}, {"config": {"layers": 1, "heads": 4, "hidden": 24, "ff": 96, "vocab": 26, "world_size": 1, "seq_len": 3}, "peak_bytes_rank0": 131072.0, "comm_bytes_per_rank": 0.0, "comm_events": {"all_reduce": 11, "all_gather": 6, "reduce_scatter": 6}}, {"config": {"layers": 2, "heads": 8, "hidden": 24, "ff": 48, "vocab": 39, "world_size": 1, "seq_len": 6}, "peak_bytes_rank0": 191552.0, "comm_bytes_per_rank": 0.0, "comm_events": {"all_reduce": 15, "all_gather": 10, "reduce_scatter": 10}}, {"config": {"layers": 2, "heads": 4, "hidden": 24, "ff": 48, "vocab": 42, "world_size": 2, "seq_len": 9}, "peak_bytes_rank0": 107264.0, "comm_bytes_per_rank": 20680.0, "comm_events": {"all_reduce": 15, "all_gather": 10, "reduce_scatter": 10}}, {"config": {"layers": 2, "heads": 4, "hidden": 24, "ff": 48, "vocab": 13, "world_size": 1, "seq_len": 4}, "peak_bytes_rank0": 171648.0, "comm_bytes_per_rank": 0.0, "comm_events": {"all_reduce": 15, "all_gather": 10, "reduce_scatter": 10}}, {"config": {"layers": 1, "heads": 4, "hidden": 32, "ff": 128, "vocab": 21, "world_size": 4, "seq_len": 9}, "peak_bytes_rank0": 66944.0, "comm_bytes_per_rank": 27468.0, "comm_events": {"all_reduce": 11, "all_gather": 6, "reduce_scatter": 6}}, {"config": {"layers": 2, "heads": 8, "hidden": 16, "ff": 64, "vocab": 37, "world_size": 2, "seq_len": 5}, "peak_bytes_rank0": 67328.0, "comm_bytes_per_rank": 7624.0, "comm_events": {"all_reduce": 15, "all_gather": 10, "reduce_scatter": 10}}, {"config": {"layers": 3, "heads": 4, "hidden": 32, "ff": 128, "vocab": 55, "world_size": 4, "seq_len": 21}, "peak_bytes_rank0": 248320.0, "comm_bytes_per_rank": 129132.0, "comm_events": {"all_reduce": 19, "all_gather": 14, "reduce_scatter": 14}}, {"config": {"layers": 2, "heads": 2, "hidden": 32, "ff": 128, "vocab": 23, "world_size": 1, "seq_len": 5}, "peak_bytes_rank0": 445440.0, "comm_bytes_per_rank": 0.0, "comm_events": {"all_reduce": 15, "all_gather": 10, "reduce_scatter": 10}}, {"config": {"layers": 1, "heads": 4, "hidden": 32, "ff": 128, "vocab": 42, "world_size": 1, "seq_len": 5}, "peak_bytes_rank0": 239616.0, "comm_bytes_per_rank": 0.0, "comm_events": {"all_reduce": 11, "all_gather": 6, "reduce_scatter": 6}}, {"config": {"layers": 3, "heads": 4, "hidden": 16, "ff": 32, "vocab": 45, "world_size": 2, "seq_len": 5}, "peak_bytes_rank0": 70016.0, "comm_bytes_per_rank": 10184.0, "comm_events": {"all_reduce": 19, "all_gather": 14, "reduce_scatter": 14}}];
+const fmt = b => b >= 1048576 ? (b/1048576).toFixed(2)+" MB"
+            : b >= 1024 ? (b/1024).toFixed(2)+" KB" : b.toFixed(0)+" B";
+const esc = s => String(s).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+// 配置 chips
+const c = DATA.config;
+[["层数",c.layers],["头数",c.heads],["隐藏维",c.hidden],["FF 维",c.ff],
+ ["词表",c.vocab],["卡数 P",c.world_size],["序列长",c.seq_len]]
+ .forEach(([k,v])=>{
+   const el=document.createElement("span"); el.className="chip";
+   el.innerHTML=k+" <b>"+v+"</b>"; document.getElementById("cfgChips").appendChild(el);
+ });
+
+// 1) 切分方式表
+const planTb=document.querySelector("#planTable tbody");
+DATA.layer_plan.forEach(r=>{
+  const tr=document.createElement("tr");
+  tr.innerHTML=`<td>${esc(r.layer)}</td><td>${esc(r.sharding)}</td>
+    <td class="muted">${esc(r.comm_fwd)}</td><td class="muted">${esc(r.comm_bwd)}</td>`;
+  planTb.appendChild(tr);
+});
+
+// 2) 显存
+const mem=DATA.memory;
+const rank0=mem.per_rank[0];
+const memMax=Math.max(...mem.per_rank.map(r=>r.param_bytes+r.grad_bytes+r.activation_bytes));
+const memBars=document.getElementById("memBars");
+mem.per_rank.forEach(r=>{
+  const total=r.param_bytes+r.grad_bytes+r.activation_bytes;
+  const w=(r.param_bytes/memMax*100), g=(r.grad_bytes/memMax*100), a=(r.activation_bytes/memMax*100);
+  const row=document.createElement("div");
+  row.innerHTML=`<div class="bar-row"><div class="lbl">rank ${r.rank}</div>
+    <div class="bar-track">
+      <div class="bar-fill" style="width:${w}%;background:#4ea1ff;float:left"></div>
+      <div class="bar-fill" style="width:${g}%;background:#ffb454;float:left"></div>
+      <div class="bar-fill" style="width:${a}%;background:#57d9a3;float:left"></div>
+    </div>
+    <div class="bar-val">${fmt(total)}</div></div>`;
+  memBars.appendChild(row);
+});
+const wItems=Object.entries(mem.weight_breakdown_elems);
+const wMax=Math.max(...wItems.map(([,n])=>n));
+const wb=document.getElementById("weightBars");
+wItems.forEach(([k,n])=>{
+  const row=document.createElement("div");
+  row.innerHTML=`<div class="bar-row"><div class="lbl">${esc(k)}</div>
+    <div class="bar-track"><div class="bar-fill" style="width:${n/wMax*100}%;background:var(--accent)"></div></div>
+    <div class="bar-val">${n} 元素</div></div>`;
+  wb.appendChild(row);
+});
+const actTb=document.querySelector("#actTable tbody");
+mem.activation_items.forEach(it=>{
+  const tr=document.createElement("tr");
+  tr.innerHTML=`<td class="mono">${esc(it.name)}</td><td class="mono">${it.elements}</td>
+    <td class="mono">${fmt(it.bytes)}</td>`;
+  actTb.appendChild(tr);
+});
+
+// 3) 通信
+const comm=DATA.communication.formula;
+const opColor={all_reduce:"var(--ar)",all_gather:"var(--ag)",reduce_scatter:"var(--rs)"};
+const opTag={all_reduce:"ar",all_gather:"ag",reduce_scatter:"rs"};
+const commMax=Math.max(...Object.values(comm.bytes_per_rank));
+const cb=document.getElementById("commBars");
+Object.entries(comm.bytes_per_rank).forEach(([op,b])=>{
+  const row=document.createElement("div");
+  row.innerHTML=`<div class="bar-row"><div class="lbl"><span class="tag ${opTag[op]}">${op.replace("_","-")}</span></div>
+    <div class="bar-track"><div class="bar-fill" style="width:${b/commMax*100}%;background:${opColor[op]}"></div></div>
+    <div class="bar-val">${fmt(b)}</div></div>`;
+  cb.appendChild(row);
+});
+const cct=document.querySelector("#commCountTable tbody");
+Object.entries(comm.events).forEach(([op,cnt])=>{
+  const tr=document.createElement("tr");
+  tr.innerHTML=`<td><span class="tag ${opTag[op]}">${op.replace("_","-")}</span></td>
+    <td class="mono">${cnt}</td><td class="mono">${fmt(comm.bytes_per_rank[op])}</td>`;
+  cct.appendChild(tr);
+});
+const evTb=document.querySelector("#eventTable tbody");
+DATA.communication.events.forEach((ev,i)=>{
+  const tr=document.createElement("tr");
+  tr.innerHTML=`<td class="mono muted">${i+1}</td>
+    <td><span class="tag ${opTag[ev.name]}">${ev.name.replace("_","-")}</span></td>
+    <td class="mono">${esc(ev.layer)}</td>
+    <td class="mono">${ev.elements_per_rank}</td>
+    <td class="mono">${fmt(ev.bytes_per_rank)}</td>`;
+  evTb.appendChild(tr);
+});
+
+// 4) 损失曲线
+(function(){
+  const losses=DATA.loss_curve, W=900,H=320,pad=48;
+  const svg=document.getElementById("lossSvg");
+  const min=Math.min(...losses), max=Math.max(...losses);
+  const x=i=>pad+i*(W-2*pad)/(losses.length-1);
+  const y=v=>H-pad-(v-min)/(max-min||1)*(H-2*pad);
+  let s="";
+  for(let i=0;i<=4;i++){
+    const gy=pad+i*(H-2*pad)/4, val=max-i*(max-min)/4;
+    s+=`<line class="gridline" x1="${pad}" y1="${gy}" x2="${W-pad}" y2="${gy}"/>`;
+    s+=`<text class="axlabel" x="${pad-8}" y="${gy+4}" text-anchor="end">${val.toFixed(2)}</text>`;
+  }
+  s+=`<line class="axis" x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}"/>`;
+  s+=`<line class="axis" x1="${pad}" y1="${pad}" x2="${pad}" y2="${H-pad}"/>`;
+  s+=`<text class="axlabel" x="${W-pad}" y="${H-pad+22}" text-anchor="end">训练步</text>`;
+  s+=`<text class="axlabel" x="${pad-30}" y="${pad-8}">损失</text>`;
+  const path=losses.map((v,i)=>(i?"L":"M")+x(i).toFixed(1)+","+y(v).toFixed(1)).join(" ");
+  s+=`<path class="loss-line" d="${path}"/>`;
+  svg.innerHTML=s;
+  document.getElementById("lossStart").textContent=losses[0].toFixed(4);
+  document.getElementById("lossEnd").textContent=losses[losses.length-1].toFixed(4);
+  document.getElementById("lossDrop").textContent=
+    (100*(losses[0]-losses[losses.length-1])/losses[0]).toFixed(1)+"%";
+})();
+
+// 附：扫描散点/柱状
+(function(){
+  const W=900,H=340,pad=52;
+  const svg=document.getElementById("sweepSvg");
+  const maxMem=Math.max(...SWEEP.map(d=>d.peak_bytes_rank0));
+  const maxComm=Math.max(...SWEEP.map(d=>d.comm_bytes_per_rank));
+  const bw=(W-2*pad)/SWEEP.length;
+  let s="";
+  SWEEP.forEach((d,i)=>{
+    const x0=pad+i*bw+bw*0.18;
+    const hMem=(d.peak_bytes_rank0/maxMem)*(H-2*pad)*0.85;
+    const hComm=(d.comm_bytes_per_rank/maxComm)*(H-2*pad)*0.85;
+    const base=H-pad;
+    s+=`<rect class="comm-bar" x="${x0}" y="${base-hMem}" width="${bw*0.32}" height="${hMem}" fill="#4ea1ff" opacity="0.85"/>`;
+    s+=`<rect class="comm-bar" x="${x0+bw*0.36}" y="${base-hComm}" width="${bw*0.32}" height="${hComm}" fill="#57d9a3" opacity="0.85"/>`;
+    s+=`<text class="axlabel" x="${x0+bw*0.35}" y="${H-pad+16}" text-anchor="middle" transform="rotate(0)">${d.config.world_size}卡</text>`;
+  });
+  s+=`<line class="axis" x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}"/>`;
+  s+=`<text class="axlabel" x="${pad}" y="${pad-14}"><tspan fill="#4ea1ff">■</tspan> 峰值显存/卡　<tspan fill="#57d9a3">■</tspan> 每卡每步通信量（24 组配置，各自归一化）</text>`;
+  svg.innerHTML=s;
+})();
+</script>
+</body>
+</html>
